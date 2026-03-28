@@ -1,0 +1,30 @@
+{
+  "brand_name": "PureFlow Water",
+  "rules": [
+    {
+      "context": "violent scenes or physical altercations",
+      "description": "PureFlow Water must never appear in scenes depicting violence, fighting, or physical harm. The brand represents purity, calm, and wellness.",
+      "severity": "critical"
+    },
+    {
+      "context": "alcohol consumption or bar environment",
+      "description": "PureFlow Water must not appear alongside alcoholic beverages, people drinking alcohol, or in bar/nightclub settings, as this conflicts with our health-focused positioning.",
+      "severity": "critical"
+    },
+    {
+      "context": "competitor brand present or mentioned",
+      "description": "PureFlow Water must not appear in the same frame or scene as competitor beverage brands (e.g. Aquafina, Dasani, Evian, SmartWater). Co-branding dilutes brand identity.",
+      "severity": "moderate"
+    },
+    {
+      "context": "unhealthy or junk food consumption",
+      "description": "PureFlow Water should not be associated with fast food, chips, candy, or other highly processed food. The brand must maintain its clean, health-conscious image.",
+      "severity": "minor"
+    },
+    {
+      "context": "environmentally harmful activities or littering",
+      "description": "PureFlow Water is committed to environmental sustainability. The brand must not appear in scenes showing littering, pollution, or destruction of natural environments.",
+      "severity": "moderate"
+    }
+  ]
+}
