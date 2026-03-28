@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from brand_compliance import Guidelines
+from .webhook_routes import router as webhook_router
 from .jobs import (
     GUIDELINES_DIR,
     VIDEOS_DIR,
@@ -48,6 +49,8 @@ app.add_middleware(
 # Serve uploaded video files so the frontend can play them back
 VIDEOS_DIR.mkdir(exist_ok=True)
 app.mount("/videos", StaticFiles(directory=str(VIDEOS_DIR)), name="videos")
+
+app.include_router(webhook_router)
 
 
 # ---------------------------------------------------------------------------
