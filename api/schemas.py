@@ -41,6 +41,7 @@ class ReportSchema(BaseModel):
     contracted_screen_time_seconds: float
     delivered_screen_time_seconds: float
     screen_time_gap_seconds: float
+    is_under_delivered: bool
     delivery_status: Literal["COMPLIANT", "VIOLATION", "UNDER-DELIVERED"]
     is_compliant: bool
     appearances: list[AppearanceSchema]
@@ -64,6 +65,7 @@ class JobSchema(BaseModel):
     brand: str
     video_filename: str
     guidelines_filename: str
+    video_url: str | None = None    # relative URL to stream the video, e.g. /videos/uuid.mp4
     created_at: datetime
     completed_at: datetime | None = None
     error: str | None = None
