@@ -24,10 +24,19 @@ _POLL_INTERVAL = 10  # seconds between status checks
 def create_index(index_name: str) -> str:
     """
     Create a new TwelveLabs index configured for brand compliance analysis.
+    If an index with the same name already exists, returns its ID instead.
 
-    Returns the index_id of the newly created index.
+    Returns the index_id.
     """
     client = get_client()
+
+    # Check for an existing index with this name to avoid 409 errors on re-runs
+    existing = list(client.indexes.list(index_name=index_name, page_limit=1))
+    if existing:
+        index_id = existing[0].id
+        print(f"Reusing existing index '{index_name}' ({index_id})")
+        return index_id
+
     response = client.indexes.create(
         index_name=index_name,
         models=_MODELS,
