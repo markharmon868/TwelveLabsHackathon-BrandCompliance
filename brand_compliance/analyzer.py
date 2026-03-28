@@ -2,14 +2,13 @@
 Core brand compliance analysis using TwelveLabs.
 
 Strategy (two-pass):
-  Pass 1 — Marengo search: for each prohibited context, find clips in the video
-           that visually or audibly match that context. This narrows the search
-           space without burning Pegasus quota on clean segments.
+  Pass 1 — Marengo search: find all clips where the brand appears, using
+           the logo description and brand name as search queries.
 
-  Pass 2 — Pegasus analyze: for each candidate clip, ask Pegasus whether the
-           brand is actually visible/mentioned AND whether the prohibited context
-           is genuinely present. Pegasus returns a structured JSON answer which
-           we parse into Violation objects.
+  Pass 2 — Pegasus classify: for each brand appearance, ask Pegasus to
+           determine whether it's compliant, a violation, or needs human
+           review. Pegasus checks all prohibited and required contexts in
+           a single call per clip.
 """
 
 import json
@@ -17,13 +16,16 @@ import re
 from typing import Any
 
 from .client import get_client
-from .models import BrandRule, Violation
+from .models import Appearance, Guidelines, Violation
 
-# Marengo search confidence threshold — clips below this are ignored in pass 1.
+# Marengo confidence threshold for brand appearance search.
 _SEARCH_THRESHOLD = "low"
 
-# How many search results to evaluate per rule (cap to avoid excessive API calls).
-_MAX_CLIPS_PER_RULE = 5
+# Cap on brand appearance clips to evaluate (avoids runaway API costs).
+_MAX_BRAND_CLIPS = 10
+
+# Pegasus confidence below this → "needs_review" instead of auto-classifying.
+_REVIEW_THRESHOLD = 0.55
 
 
 # ---------------------------------------------------------------------------
@@ -33,184 +35,238 @@ _MAX_CLIPS_PER_RULE = 5
 def analyze_brand_compliance(
     index_id: str,
     video_id: str,
-    brand_name: str,
-    rules: list[BrandRule],
-) -> list[Violation]:
+    guidelines: Guidelines,
+) -> tuple[list[Appearance], list[Violation]]:
     """
-    Scan a video for brand safety violations.
+    Scan a video for brand appearances and compliance violations.
 
-    Parameters
-    ----------
-    index_id   : TwelveLabs index that contains the video.
-    video_id   : The video to analyse.
-    brand_name : Brand whose appearance we're monitoring (e.g. "PureFlow Water").
-    rules      : List of BrandRule objects defining prohibited contexts.
-
-    Returns a list of Violation objects (may be empty if video is clean).
+    Returns
+    -------
+    appearances : every clip where the brand was detected (compliant / violation / needs_review)
+    violations  : subset of appearances that breach a prohibited context rule
     """
     client = get_client()
+
+    # --- Pass 1: find all brand appearance clips via Marengo ---
+    print(f"  Searching for '{guidelines.brand}' appearances...")
+    raw_clips = _find_brand_appearances(client, index_id, video_id, guidelines)
+    if not raw_clips:
+        print("  No brand appearances found in video.")
+        return [], []
+
+    print(f"  Found {len(raw_clips)} candidate clip(s). Classifying with Pegasus...")
+
+    # --- Pass 2: classify each clip with Pegasus ---
+    appearances: list[Appearance] = []
     violations: list[Violation] = []
 
-    for rule in rules:
-        print(f"  Scanning for: '{rule.context}'...")
+    for clip in raw_clips:
+        appearance = _classify_appearance(client, video_id, guidelines, clip)
+        appearances.append(appearance)
+        if appearance.violation:
+            violations.append(appearance.violation)
 
-        # --- Pass 1: find candidate clips via Marengo search ---
-        candidates = _search_clips(client, index_id, video_id, rule.context)
-        if not candidates:
-            print(f"    No candidate clips found.")
-            continue
+    # Sort by timestamp and deduplicate overlapping violations
+    appearances.sort(key=lambda a: a.timestamp_start)
+    violations = _deduplicate(violations)
 
-        print(f"    Found {len(candidates)} candidate clip(s). Verifying with Pegasus...")
-
-        # --- Pass 2: verify each clip with Pegasus ---
-        for clip in candidates:
-            violation = _verify_clip(
-                client=client,
-                video_id=video_id,
-                brand_name=brand_name,
-                rule=rule,
-                clip_start=clip["start"],
-                clip_end=clip["end"],
-                search_score=clip["score"],
-            )
-            if violation:
-                violations.append(violation)
-
-    # Deduplicate overlapping violations (same context, overlapping timestamps)
-    return _deduplicate(violations)
+    return appearances, violations
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _search_clips(
+def _find_brand_appearances(
     client: Any,
     index_id: str,
     video_id: str,
-    context_query: str,
+    guidelines: Guidelines,
 ) -> list[dict]:
     """
-    Use Marengo to find clips that match the prohibited context query.
-    Returns a list of dicts with keys: start, end, score.
+    Use Marengo to find clips where the brand appears.
+    Searches using both the brand name and logo description for best recall.
+    Returns a list of dicts: {start, end, score}.
     """
-    try:
-        results = client.search.create(
-            index_id=index_id,
-            query_text=context_query,
-            search_options=["visual", "audio"],
-            threshold=_SEARCH_THRESHOLD,
-            group_by="clip",
-            page_limit=_MAX_CLIPS_PER_RULE,
-        )
-    except Exception as e:
-        print(f"    Search error for '{context_query}': {e}")
-        return []
+    queries = [guidelines.brand]
+    if guidelines.logo_description:
+        queries.append(guidelines.logo_description)
 
-    clips = []
-    for item in (results.data or []):
-        # Filter to this specific video (index may contain multiple videos)
-        if item.video_id != video_id:
+    seen: dict[tuple, dict] = {}  # (start, end) → clip, to deduplicate across queries
+
+    for query in queries:
+        try:
+            results = client.search.create(
+                index_id=index_id,
+                query_text=query,
+                search_options=["visual", "audio"],
+                threshold=_SEARCH_THRESHOLD,
+                group_by="clip",
+                page_limit=_MAX_BRAND_CLIPS,
+            )
+        except Exception as e:
+            print(f"    Search error for '{query}': {e}")
             continue
-        clips.append({
-            "start": item.start,
-            "end": item.end,
-            "score": item.score,
-        })
 
-    return clips[:_MAX_CLIPS_PER_RULE]
+        for item in (results.data or []):
+            if item.video_id != video_id:
+                continue
+            key = (round(item.start, 1), round(item.end, 1))
+            if key not in seen or item.score > seen[key]["score"]:
+                seen[key] = {"start": item.start, "end": item.end, "score": item.score}
+
+    clips = sorted(seen.values(), key=lambda c: c["score"], reverse=True)
+    return clips[:_MAX_BRAND_CLIPS]
 
 
-def _verify_clip(
+def _classify_appearance(
     client: Any,
     video_id: str,
-    brand_name: str,
-    rule: BrandRule,
-    clip_start: float,
-    clip_end: float,
-    search_score: float,
-) -> Violation | None:
+    guidelines: Guidelines,
+    clip: dict,
+) -> Appearance:
     """
-    Ask Pegasus to verify whether the brand is present alongside the
-    prohibited context in this clip. Returns a Violation or None.
+    Ask Pegasus to classify a single brand appearance clip.
+    Returns an Appearance (with an embedded Violation if one was detected).
     """
-    prompt = _build_verification_prompt(
-        brand_name=brand_name,
-        rule=rule,
-        clip_start=clip_start,
-        clip_end=clip_end,
-    )
+    clip_start = clip["start"]
+    clip_end = clip["end"]
+    search_score = clip["score"]
+
+    prompt = _build_classification_prompt(guidelines, clip_start, clip_end)
 
     try:
         response = client.analyze(video_id=video_id, prompt=prompt)
         raw_text = response.data or ""
     except Exception as e:
         print(f"    Pegasus error at {clip_start:.1f}s–{clip_end:.1f}s: {e}")
-        return None
+        return _needs_review_appearance(guidelines.brand, clip_start, clip_end, str(e))
 
     parsed = _parse_pegasus_response(raw_text)
     if not parsed:
-        return None
+        return _needs_review_appearance(
+            guidelines.brand, clip_start, clip_end,
+            "Could not parse Pegasus response — flagged for human review."
+        )
 
-    if not parsed.get("brand_detected") or not parsed.get("violation_detected"):
-        return None
-
-    # Blend Marengo search score with Pegasus confidence (weighted average)
+    # Blend Marengo search score with Pegasus confidence
     marengo_conf = search_score / 100.0 if search_score > 1.0 else search_score
     pegasus_conf = float(parsed.get("confidence", 0.7))
     confidence = round(0.4 * marengo_conf + 0.6 * pegasus_conf, 3)
 
-    return Violation(
+    brand_detected = parsed.get("brand_detected", False)
+    if not brand_detected:
+        # Marengo found it but Pegasus disagrees — treat as needs_review if borderline
+        if confidence >= _REVIEW_THRESHOLD:
+            return _needs_review_appearance(
+                guidelines.brand, clip_start, clip_end,
+                parsed.get("explanation", "Brand detection uncertain.")
+            )
+        # Low confidence and Pegasus says no brand — skip
+        return Appearance(
+            timestamp_start=clip_start,
+            timestamp_end=clip_end,
+            brand=guidelines.brand,
+            confidence=confidence,
+            status="needs_review",
+            explanation=parsed.get("explanation", "Brand not confirmed in this segment."),
+        )
+
+    if confidence < _REVIEW_THRESHOLD:
+        return _needs_review_appearance(
+            guidelines.brand, clip_start, clip_end,
+            parsed.get("explanation", "Low confidence detection — flagged for human review.")
+        )
+
+    # Check for a violation
+    violated_context = parsed.get("violated_context")
+    if violated_context:
+        severity = guidelines.severity_for(violated_context)
+        explanation = parsed.get("explanation", "")
+        violation = Violation(
+            timestamp_start=clip_start,
+            timestamp_end=clip_end,
+            brand=guidelines.brand,
+            prohibited_context=violated_context,
+            explanation=explanation,
+            confidence=confidence,
+            severity=severity,
+        )
+        return Appearance(
+            timestamp_start=clip_start,
+            timestamp_end=clip_end,
+            brand=guidelines.brand,
+            confidence=confidence,
+            status="violation",
+            explanation=explanation,
+            violation=violation,
+        )
+
+    return Appearance(
         timestamp_start=clip_start,
         timestamp_end=clip_end,
-        brand=brand_name,
-        prohibited_context=rule.context,
-        explanation=parsed.get("explanation", raw_text[:300]),
+        brand=guidelines.brand,
         confidence=confidence,
-        severity=rule.severity,
+        status="compliant",
+        explanation=parsed.get("explanation", "Brand appears in a compliant context."),
     )
 
 
-def _build_verification_prompt(
-    brand_name: str,
-    rule: BrandRule,
-    clip_start: float,
-    clip_end: float,
+def _needs_review_appearance(
+    brand: str, start: float, end: float, explanation: str
+) -> Appearance:
+    return Appearance(
+        timestamp_start=start,
+        timestamp_end=end,
+        brand=brand,
+        confidence=0.0,
+        status="needs_review",
+        explanation=explanation,
+    )
+
+
+def _build_classification_prompt(
+    guidelines: Guidelines, clip_start: float, clip_end: float
 ) -> str:
-    return f"""You are a brand safety analyst reviewing a video segment from approximately {clip_start:.1f}s to {clip_end:.1f}s.
+    prohibited = "\n".join(f'  - "{c}"' for c in guidelines.prohibited_contexts)
+    required = "\n".join(f'  - "{c}"' for c in guidelines.required_contexts)
 
-Brand being monitored: "{brand_name}"
-Prohibited context rule: "{rule.context}"
-Rule description: "{rule.description}"
+    return f"""You are a brand integration auditor reviewing a video segment from approximately {clip_start:.1f}s to {clip_end:.1f}s.
 
-Carefully analyze this video segment and answer the following questions. Respond ONLY with a valid JSON object — no markdown, no code fences, no extra text.
+Brand being monitored: "{guidelines.brand}"
+Logo / visual identity: "{guidelines.logo_description}"
+
+PROHIBITED contexts (brand must NOT appear in these):
+{prohibited or "  (none specified)"}
+
+REQUIRED contexts (brand SHOULD appear in these to fulfill the contract):
+{required or "  (none specified)"}
+
+Carefully analyze this video segment and respond ONLY with a valid JSON object — no markdown, no code fences, no extra text.
 
 {{
   "brand_detected": true or false,
-  "violation_detected": true or false,
   "confidence": 0.0 to 1.0,
-  "explanation": "One to three sentences describing exactly what you see and why it does or does not constitute a violation."
+  "violated_context": "exact prohibited context string from the list above, or null if none violated",
+  "explanation": "Two to four sentences. State whether the brand is visible, describe exactly what is happening in the scene, and explain why it is or is not a violation. Be specific — name objects, actions, and setting. A brand manager must understand this without watching the clip."
 }}
 
-Guidelines:
-- "brand_detected" is true only if the "{brand_name}" brand logo, name, product, or packaging is clearly visible or audibly mentioned in this segment.
-- "violation_detected" is true only if BOTH (a) the brand is detected AND (b) the prohibited context "{rule.context}" is present in this segment.
-- "confidence" reflects how certain you are of your assessment (1.0 = completely certain).
-- Be conservative: if the brand is ambiguous, set brand_detected to false."""
+Rules for your response:
+- "brand_detected" is true only if "{guidelines.brand}" logo, name, product, or packaging is clearly visible or audibly mentioned.
+- "violated_context" must be copied exactly from the prohibited contexts list above, or null.
+- Only report one violated_context — the most severe one if multiple apply.
+- "confidence" is your certainty that brand_detected and violated_context are correct (1.0 = certain).
+- If the brand is partially obscured or ambiguous, set confidence below 0.6.
+- The explanation must be specific enough for a non-technical brand manager to understand without watching the clip."""
 
 
 def _parse_pegasus_response(raw_text: str) -> dict | None:
-    """
-    Extract and parse the JSON object from Pegasus's response text.
-    Handles cases where the model adds extra prose around the JSON.
-    """
-    # Try direct parse first
+    """Extract and parse the JSON object from Pegasus's response text."""
     try:
         return json.loads(raw_text.strip())
     except json.JSONDecodeError:
         pass
 
-    # Try to extract a JSON block with regex
     match = re.search(r"\{.*?\}", raw_text, re.DOTALL)
     if match:
         try:
@@ -223,8 +279,8 @@ def _parse_pegasus_response(raw_text: str) -> dict | None:
 
 def _deduplicate(violations: list[Violation]) -> list[Violation]:
     """
-    Remove duplicate violations where the same context fires on heavily
-    overlapping clips. Keeps the higher-confidence violation.
+    Remove duplicate violations where the same prohibited context fires on
+    heavily overlapping clips. Keeps the higher-confidence entry.
     """
     if len(violations) <= 1:
         return violations
@@ -237,7 +293,6 @@ def _deduplicate(violations: list[Violation]) -> list[Violation]:
         for existing in kept:
             if existing.prohibited_context != candidate.prohibited_context:
                 continue
-            # Check for >50% temporal overlap
             overlap_start = max(candidate.timestamp_start, existing.timestamp_start)
             overlap_end = min(candidate.timestamp_end, existing.timestamp_end)
             overlap_duration = max(0.0, overlap_end - overlap_start)

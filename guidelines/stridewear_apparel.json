@@ -1,0 +1,24 @@
+{
+  "brand": "StrideWear",
+  "logo_description": "Bold black 'SW' monogram with a forward-leaning chevron, often on athletic apparel, shoes, or a white hang-tag",
+  "contracted_screen_time_seconds": 60,
+  "required_contexts": [
+    "athletic performance or competitive sports scenes",
+    "professional or elite athletes training",
+    "high-energy, motivational moments"
+  ],
+  "prohibited_contexts": [
+    "sedentary or lazy behavior",
+    "competitor athletic brand apparel visible in the same frame",
+    "gambling or betting environments",
+    "tobacco or cigarette use",
+    "content targeting children under 13"
+  ],
+  "severity_overrides": {
+    "competitor athletic brand apparel visible in the same frame": "critical",
+    "gambling or betting environments": "critical",
+    "tobacco or cigarette use": "critical",
+    "sedentary or lazy behavior": "minor",
+    "content targeting children under 13": "moderate"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "brand": "NovaDrive",
+  "logo_description": "Sleek silver 'N' arrow logo on the front grille or steering wheel of a dark-colored electric vehicle; 'NovaDrive' wordmark in silver on a black background",
+  "contracted_screen_time_seconds": 90,
+  "required_contexts": [
+    "urban or highway driving scenes",
+    "environmentally conscious or sustainability messaging",
+    "technology, innovation, or forward-thinking themes",
+    "professional or aspirational lifestyle settings"
+  ],
+  "prohibited_contexts": [
+    "reckless driving, speeding, or street racing",
+    "fossil fuel or oil industry imagery",
+    "competitor electric vehicle brands in the same frame",
+    "traffic accidents or vehicle collisions",
+    "road rage or aggressive driving behavior"
+  ],
+  "severity_overrides": {
+    "reckless driving, speeding, or street racing": "critical",
+    "traffic accidents or vehicle collisions": "critical",
+    "competitor electric vehicle brands in the same frame": "critical",
+    "road rage or aggressive driving behavior": "moderate",
+    "fossil fuel or oil industry imagery": "moderate"
+  }
+}
