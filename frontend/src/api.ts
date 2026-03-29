@@ -110,7 +110,8 @@ export async function reviewJob(
 }
 
 export async function deleteGuideline(filename: string): Promise<void> {
-  const res = await fetch(`/guidelines/samples/${filename}`, { method: "DELETE" });
+  const headers = new Headers(authHeaders());
+  const res = await fetch(`/guidelines/samples/${filename}`, { method: "DELETE", headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail ?? `Delete failed: ${res.status}`);

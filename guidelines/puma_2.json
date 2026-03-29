@@ -1,0 +1,12 @@
+{
+  "brand": "Puma",
+  "logo_description": "Panther, Puma Logo",
+  "contracted_screen_time_seconds": 30,
+  "required_contexts": [
+    "Athletic, and sports"
+  ],
+  "prohibited_contexts": [
+    "Other brand logos that are clearly visible"
+  ],
+  "severity_overrides": {}
+}

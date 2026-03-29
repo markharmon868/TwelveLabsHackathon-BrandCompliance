@@ -1,0 +1,22 @@
+{
+  "brand": "Red Bull",
+  "logo_description": "Red Bull logo: two red bulls charging toward each other head-on, about to collide, with a yellow sun or circle in the background between them. The words 'Red Bull' appear in bold red and blue lettering, often with the tagline 'gives you wings'. The Red Bull can is slim and silver with the logo prominently displayed in red and blue. The product appears as a slim aluminum energy drink can, often held in hand, placed on surfaces, or shown in coolers and refrigerators.",
+  "contracted_screen_time_seconds": 20,
+  "required_contexts": [
+    "Extreme sports, action sports, or high-energy activities",
+    "Music events, festivals, or nightlife",
+    "Esports or gaming environments"
+  ],
+  "prohibited_contexts": [
+    "children or minors consuming the product",
+    "competitor energy drink brands (Monster Energy, Rockstar, Bang Energy)",
+    "mixing with alcohol or depicting irresponsible consumption",
+    "health or medical claims contradicting Red Bull guidelines",
+    "driving or operating heavy machinery while consuming"
+  ],
+  "severity_overrides": {
+    "children or minors consuming the product": "critical",
+    "competitor energy drink brands (Monster Energy, Rockstar, Bang Energy)": "critical",
+    "mixing with alcohol or depicting irresponsible consumption": "critical"
+  }
+}

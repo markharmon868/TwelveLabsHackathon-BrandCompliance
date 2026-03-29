@@ -1,0 +1,21 @@
+{
+  "brand": "Adidas",
+  "logo_description": "Adidas has two logo variants: (1) the Three Stripes — three parallel diagonal or vertical stripes on the side of shoes, legs of shorts or pants, and sleeves of apparel, always in a single contrasting color against the garment; (2) the Trefoil — three leaf-shaped lobes arranged in a triangle meeting at a central stem, used on lifestyle and Originals products. The word ADIDAS often appears in bold uppercase sans-serif letters. Three Stripes appear prominently on the sides of sneakers and running shoes, and as racing stripes down sportswear sleeves and legs.",
+  "contracted_screen_time_seconds": 40,
+  "required_contexts": [
+    "Athletic, sports, or fitness scenes",
+    "Streetwear or lifestyle fashion contexts"
+  ],
+  "prohibited_contexts": [
+    "competitor brand logos or products (Nike, Puma, Reebok, Under Armour, New Balance)",
+    "hate symbols or discriminatory imagery",
+    "tobacco products",
+    "violence or weapons",
+    "illegal activity"
+  ],
+  "severity_overrides": {
+    "competitor brand logos or products (Nike, Puma, Reebok, Under Armour, New Balance)": "critical",
+    "hate symbols or discriminatory imagery": "critical",
+    "tobacco products": "critical"
+  }
+}

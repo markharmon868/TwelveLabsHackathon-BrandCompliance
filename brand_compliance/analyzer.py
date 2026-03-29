@@ -22,7 +22,7 @@ from .models import Appearance, Guidelines, Violation
 _SEARCH_THRESHOLD = "none"
 
 # Cap on brand appearance clips to evaluate (avoids runaway API costs).
-_MAX_BRAND_CLIPS = 10
+_MAX_BRAND_CLIPS = 20
 
 # Pegasus confidence below this → "needs_review" instead of auto-classifying.
 _REVIEW_THRESHOLD = 0.55
@@ -78,6 +78,29 @@ def analyze_brand_compliance(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _build_search_queries(guidelines: Guidelines) -> list[str]:
+    """
+    Build a short list of focused visual search queries for Marengo.
+
+    Long prose descriptions score poorly in embedding search — short, concrete
+    phrases work much better. We generate up to 4 queries:
+      1. Brand name alone (catches text on screen)
+      2. "Brand logo" (catches the logo graphic)
+      3. "Brand product" (catches packaging/apparel)
+      4. First sentence of the logo_description (if short) for visual shape recall
+    """
+    brand = guidelines.brand
+    queries = [brand, f"{brand} logo", f"{brand} product"]
+
+    if guidelines.logo_description:
+        # Take only the first sentence so it stays short and focused
+        first_sentence = guidelines.logo_description.split(".")[0].strip()
+        if first_sentence and first_sentence.lower() not in (brand.lower(), f"{brand.lower()} logo"):
+            queries.append(first_sentence)
+
+    return queries
+
+
 def _find_brand_appearances(
     client: Any,
     index_id: str,
@@ -86,13 +109,10 @@ def _find_brand_appearances(
 ) -> list[dict]:
     """
     Use Marengo to find clips where the brand appears.
-    Searches using both the brand name and logo description for best recall.
+    Searches using multiple short, focused queries for best recall.
     Returns a list of dicts: {start, end, score}.
     """
-    queries = [guidelines.brand]
-    if guidelines.logo_description:
-        queries.append(guidelines.logo_description)
-
+    queries = _build_search_queries(guidelines)
     seen: dict[tuple, dict] = {}  # (start, end) → clip, to deduplicate across queries
 
     for query in queries:

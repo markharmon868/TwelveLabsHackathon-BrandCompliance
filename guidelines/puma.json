@@ -1,16 +1,19 @@
 {
   "brand": "Puma",
-  "logo_description": "Puma logo: a leaping panther or cougar silhouette bounding to the right, usually in black or white, printed on athletic shoes, sneakers, sportswear, jerseys, t-shirts, shorts, bags, and socks. The word PUMA often appears alongside the cat icon in bold uppercase letters.",
+  "logo_description": "Puma logo: a leaping big cat (panther or puma/cougar) silhouette mid-jump, bounding to the right with all four legs extended, in solid black or white. The cat shape is sleek and athletic with a long tail. The word PUMA appears in bold uppercase block letters, usually directly below or beside the leaping cat icon. This logo appears on the tongue tab of sneakers and athletic shoes, the chest or sleeve of jerseys and sportswear, on bags and accessories. Puma shoes often show the leaping cat on the side or heel.",
   "contracted_screen_time_seconds": 30,
   "required_contexts": [
-    "Athletic and sports scenes"
+    "Athletic, sports, or fitness scenes",
+    "Sportswear or athletic footwear contexts"
   ],
   "prohibited_contexts": [
-    "other brand logos",
-    "competitor brand products"
+    "competitor brand logos or products (Nike, Adidas, Reebok, Under Armour, New Balance)",
+    "tobacco or alcohol products",
+    "violence or weapons",
+    "illegal activity"
   ],
   "severity_overrides": {
-    "other brand logos": "critical",
-    "competitor brand products": "critical"
+    "competitor brand logos or products (Nike, Adidas, Reebok, Under Armour, New Balance)": "critical",
+    "tobacco or alcohol products": "critical"
   }
 }

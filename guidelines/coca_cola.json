@@ -1,0 +1,21 @@
+{
+  "brand": "Coca-Cola",
+  "logo_description": "Coca-Cola logo: the iconic Spencerian script wordmark 'Coca-Cola' in white or red cursive lettering, often on a red background. The product appears as a red aluminum can or glass/plastic bottle with a white wave ribbon design and the Coca-Cola script. The classic contour glass bottle shape is also distinctive. Product packaging is predominantly red with white text. The word 'Coke' is also an accepted brand reference.",
+  "contracted_screen_time_seconds": 30,
+  "required_contexts": [
+    "Social gatherings, meals, or celebratory moments",
+    "Positive lifestyle or family-friendly settings"
+  ],
+  "prohibited_contexts": [
+    "competitor cola or soda brands (Pepsi, RC Cola, store brands)",
+    "mixing with alcohol",
+    "health or diet claims not approved by Coca-Cola",
+    "political messaging",
+    "tobacco or drugs"
+  ],
+  "severity_overrides": {
+    "competitor cola or soda brands (Pepsi, RC Cola, store brands)": "critical",
+    "mixing with alcohol": "high",
+    "tobacco or drugs": "critical"
+  }
+}

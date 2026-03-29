@@ -252,10 +252,15 @@ export default function UploadPage() {
         <button
           type="submit"
           disabled={!canSubmit}
-          className="w-full py-3.5 px-6 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed text-[#0e006a] active:scale-[0.98]"
+          className="w-full py-3.5 px-6 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed text-[#0e006a] active:scale-[0.98] flex items-center justify-center gap-2"
           style={{ background: "linear-gradient(135deg, #c3c1ff, #5b53ff)" }}
         >
-          {submitting ? "Submitting…" : "Start Audit"}
+          {submitting ? (
+            <>
+              <span className="w-4 h-4 rounded-full border-2 border-[#0e006a]/30 border-t-[#0e006a] animate-spin" />
+              Uploading & indexing…
+            </>
+          ) : "Start Audit"}
         </button>
       </form>
     </div>

@@ -52,15 +52,23 @@ export default function JobsListPage() {
             className="block bg-obs-low p-5 rounded-xl transition-colors hover:bg-obs-mid"
           >
             <div className="flex items-center justify-between">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="font-semibold text-vio-text">{job.brand}</span>
-                  <SourceBadge source={job.source} />
-                  <JobStatusBadge status={job.status} />
-                  {job.report && <DeliveryBadge status={job.report.delivery_status} />}
-                  {job.review_status && <ReviewBadge status={job.review_status} />}
+              <div className="min-w-0 flex items-center gap-3">
+                {(job.status === "indexing" || job.status === "analyzing" || job.status === "queued") && (
+                  <span className="w-2 h-2 rounded-full bg-vio animate-pulse shrink-0" />
+                )}
+                <div>
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="font-semibold text-vio-text">{job.brand}</span>
+                    <SourceBadge source={job.source} />
+                    <JobStatusBadge status={job.status} />
+                    {job.report && <DeliveryBadge status={job.report.delivery_status} />}
+                    {job.review_status && <ReviewBadge status={job.review_status} />}
+                  </div>
+                  <p className="text-xs text-muted truncate">{job.video_filename}</p>
+                  {(job.status === "indexing" || job.status === "analyzing") && job.progress_message && (
+                    <p className="text-[10px] text-vio/50 mt-0.5 truncate">{job.progress_message}</p>
+                  )}
                 </div>
-                <p className="text-xs text-muted truncate">{job.video_filename}</p>
               </div>
               <div className="text-right text-xs text-muted/60 shrink-0 ml-4">
                 <p>{new Date(job.created_at).toLocaleDateString()}</p>

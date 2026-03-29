@@ -39,6 +39,7 @@ export default function GuidelinesPage() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [loadingPolicy, setLoadingPolicy] = useState(false);
 
   const [brand, setBrand] = useState(EMPTY_FORM.brand);
   const [logoDescription, setLogoDescription] = useState(EMPTY_FORM.logoDescription);
@@ -52,6 +53,13 @@ export default function GuidelinesPage() {
 
   useEffect(() => { loadSamples(); }, []);
 
+  // Auto-clear success after 3s
+  useEffect(() => {
+    if (!success) return;
+    const t = setTimeout(() => setSuccess(null), 3000);
+    return () => clearTimeout(t);
+  }, [success]);
+
   const applyForm = (f: ReturnType<typeof resetForm>) => {
     setBrand(f.brand);
     setLogoDescription(f.logoDescription);
@@ -61,10 +69,12 @@ export default function GuidelinesPage() {
   };
 
   const handleSelectSample = async (filename: string) => {
+    if (loadingPolicy) return;
     setSelected(filename);
     setIsNew(false);
     setError(null);
     setSuccess(null);
+    setLoadingPolicy(true);
     try {
       const data = await getGuideline(filename);
       applyForm({
@@ -82,6 +92,8 @@ export default function GuidelinesPage() {
       });
     } catch {
       setError("Failed to load policy.");
+    } finally {
+      setLoadingPolicy(false);
     }
   };
 
@@ -119,13 +131,36 @@ export default function GuidelinesPage() {
       const data = buildData();
       if (isNew) {
         const res = await createGuideline(data);
-        await loadSamples();
+        // Optimistically add to sidebar immediately
+        const newSample: GuidelinesSample = {
+          filename: res.filename,
+          brand: data.brand,
+          prohibited_count: data.prohibited_contexts.length,
+          required_count: data.required_contexts.length,
+          contracted_screen_time_seconds: data.contracted_screen_time_seconds,
+        };
+        setSamples((prev) => [...prev, newSample]);
         setSelected(res.filename);
         setIsNew(false);
         setSuccess("Policy created.");
+        // Refresh in background to get canonical data
+        loadSamples();
       } else if (selected) {
         await updateGuideline(selected, data);
-        await loadSamples();
+        // Optimistically update sidebar
+        setSamples((prev) =>
+          prev.map((s) =>
+            s.filename === selected
+              ? {
+                  ...s,
+                  brand: data.brand,
+                  prohibited_count: data.prohibited_contexts.length,
+                  required_count: data.required_contexts.length,
+                  contracted_screen_time_seconds: data.contracted_screen_time_seconds,
+                }
+              : s
+          )
+        );
         setSuccess("Changes saved.");
       }
     } catch (err) {
@@ -141,7 +176,7 @@ export default function GuidelinesPage() {
     setDeleting(true);
     try {
       await deleteGuideline(selected);
-      await loadSamples();
+      setSamples((prev) => prev.filter((s) => s.filename !== selected));
       setSelected(null);
       setIsNew(false);
       applyForm(resetForm());
@@ -174,9 +209,9 @@ export default function GuidelinesPage() {
   const showForm = isNew || selected !== null;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-[calc(100vh-0px)] overflow-hidden">
       {/* Left: Policy list */}
-      <div className="w-60 shrink-0 flex flex-col p-6 gap-4" style={{ borderRight: "1px solid rgba(70,69,86,0.1)" }}>
+      <div className="w-60 shrink-0 flex flex-col p-6 gap-4 overflow-y-auto" style={{ borderRight: "1px solid rgba(70,69,86,0.1)" }}>
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-muted uppercase tracking-widest">Policies</span>
           <button
@@ -188,7 +223,7 @@ export default function GuidelinesPage() {
           </button>
         </div>
 
-        <div className="space-y-1 overflow-y-auto flex-1">
+        <div className="space-y-1 flex-1">
           {samples.length === 0 && !isNew && (
             <p className="text-muted/40 text-xs py-4 text-center">No policies yet</p>
           )}
@@ -202,11 +237,12 @@ export default function GuidelinesPage() {
             <button
               key={s.filename}
               onClick={() => handleSelectSample(s.filename)}
+              disabled={loadingPolicy}
               className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors ${
                 selected === s.filename && !isNew
                   ? "bg-obs-top text-vio"
                   : "text-vio-text/60 hover:bg-obs-mid hover:text-vio-text"
-              }`}
+              } disabled:opacity-60`}
             >
               <p className="text-sm font-semibold truncate">{s.brand}</p>
               <p className="text-[10px] text-muted mt-0.5">
@@ -223,6 +259,11 @@ export default function GuidelinesPage() {
           <div className="flex items-center justify-center h-full flex-col gap-3 text-muted/30">
             <span className="material-symbols-outlined" style={{ fontSize: "48px" }}>policy</span>
             <p className="text-sm">Select a policy or create a new one</p>
+          </div>
+        ) : loadingPolicy ? (
+          <div className="flex items-center justify-center h-full flex-col gap-3 text-muted/40">
+            <span className="w-6 h-6 rounded-full border-2 border-vio/20 border-t-vio animate-spin" />
+            <p className="text-sm">Loading policy…</p>
           </div>
         ) : (
           <form onSubmit={handleSave} className="max-w-xl space-y-6">
@@ -264,6 +305,9 @@ export default function GuidelinesPage() {
                 rows={3}
                 className="w-full bg-obs-mid rounded-lg px-3 py-2.5 text-sm text-vio-text placeholder:text-muted/30 focus:outline-none focus:ring-1 focus:ring-vio/30 resize-none"
               />
+              <p className="text-[10px] text-muted/40 mt-1">
+                Be specific — describe logo shape, colors, and where it typically appears on products.
+              </p>
             </Field>
 
             {/* Contracted screen time */}
@@ -370,10 +414,15 @@ export default function GuidelinesPage() {
             <button
               type="submit"
               disabled={saving}
-              className="w-full py-3 px-6 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed text-[#0e006a] active:scale-[0.98]"
+              className="w-full py-3 px-6 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed text-[#0e006a] active:scale-[0.98] flex items-center justify-center gap-2"
               style={{ background: "linear-gradient(135deg, #c3c1ff, #5b53ff)" }}
             >
-              {saving ? "Saving…" : isNew ? "Create Policy" : "Save Changes"}
+              {saving ? (
+                <>
+                  <span className="w-4 h-4 rounded-full border-2 border-[#0e006a]/30 border-t-[#0e006a] animate-spin" />
+                  Saving…
+                </>
+              ) : isNew ? "Create Policy" : "Save Changes"}
             </button>
           </form>
         )}

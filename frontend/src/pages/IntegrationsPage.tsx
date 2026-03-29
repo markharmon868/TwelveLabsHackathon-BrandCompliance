@@ -194,8 +194,7 @@ export default function IntegrationsPage() {
               className="w-full bg-obs-mid rounded-lg px-3 py-2.5 text-sm text-vio-text placeholder:text-muted/30 focus:outline-none focus:ring-1 focus:ring-vio/30 font-mono disabled:opacity-40"
             />
             <p className="text-[10px] text-muted/40 mt-1">
-              Use <span className="font-mono text-vio/60">ngrok</span>,{" "}
-              <span className="font-mono text-vio/60">cloudflare tunnel</span>, or a deployed URL.
+              Your Railway, ngrok, or Cloudflare Tunnel URL — no trailing slash.
             </p>
           </div>
 
