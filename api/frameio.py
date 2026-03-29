@@ -5,8 +5,10 @@ Handles asset fetching, video downloading, and posting compliance
 violations back as timestamped comments on the asset.
 """
 
+import base64
 import hashlib
 import hmac
+import json
 import os
 import time
 from pathlib import Path
@@ -20,11 +22,119 @@ FRAMEIO_API_BASE = "https://api.frame.io/v4"
 FRAMEIO_TOKEN = os.getenv("FRAMEIO_API_TOKEN", "").strip()
 _account_id_cache: str = os.getenv("FRAMEIO_ACCOUNT_ID", "").strip()
 
+# Adobe IMS token refresh endpoint
+_IMS_TOKEN_URL = "https://ims-na1.adobelogin.com/ims/token/v3"
+
+# Refresh if token expires within this many seconds
+_REFRESH_BUFFER_SECONDS = 300  # 5 minutes
+
 # Default frame rate used when converting seconds → HH:MM:SS:FF timestamps.
 DEFAULT_FPS = 24
 
 
+def _parse_jwt_expiry(token: str) -> float | None:
+    """
+    Decode the JWT payload (no signature verification) and return the Unix
+    timestamp (seconds) at which the token expires, or None if unparseable.
+    Adobe IMS JWTs carry created_at (ms) and expires_in (ms) in the payload.
+    """
+    try:
+        payload_b64 = token.split(".")[1]
+        # Pad to a valid base64 length
+        payload_b64 += "=" * (-len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        created_at_ms = float(payload["created_at"])
+        expires_in_ms = float(payload["expires_in"])
+        return (created_at_ms + expires_in_ms) / 1000.0
+    except Exception:
+        return None
+
+
+def _token_is_expiring() -> bool:
+    """Return True if the current token is missing, expired, or expiring soon."""
+    if not FRAMEIO_TOKEN:
+        return True
+    expiry = _parse_jwt_expiry(FRAMEIO_TOKEN)
+    if expiry is None:
+        return False  # Can't parse — assume still valid
+    return time.time() >= (expiry - _REFRESH_BUFFER_SECONDS)
+
+
+def _refresh_token() -> bool:
+    """
+    Use FRAMEIO_REFRESH_TOKEN to get a new access token from Adobe IMS.
+    Updates FRAMEIO_TOKEN in memory and persists both tokens to .env.
+    Returns True on success.
+    """
+    global FRAMEIO_TOKEN
+
+    refresh_tok = os.getenv("FRAMEIO_REFRESH_TOKEN", "").strip()
+    client_id = os.getenv("FRAMEIO_CLIENT_ID", "").strip()
+    client_secret = os.getenv("FRAMEIO_CLIENT_SECRET", "").strip()
+
+    if not refresh_tok or not client_id or not client_secret:
+        print("[Frame.io] Cannot refresh token — missing FRAMEIO_REFRESH_TOKEN, CLIENT_ID, or CLIENT_SECRET")
+        return False
+
+    try:
+        resp = requests.post(
+            _IMS_TOKEN_URL,
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_tok,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"[Frame.io] Token refresh request failed: {e}")
+        return False
+
+    new_access = data.get("access_token", "")
+    new_refresh = data.get("refresh_token", "")
+
+    if not new_access:
+        print(f"[Frame.io] Token refresh returned no access_token: {data}")
+        return False
+
+    FRAMEIO_TOKEN = new_access
+    os.environ["FRAMEIO_API_TOKEN"] = new_access
+    if new_refresh:
+        os.environ["FRAMEIO_REFRESH_TOKEN"] = new_refresh
+
+    # Persist to .env
+    _env_file = Path(__file__).parent.parent / ".env"
+    if _env_file.exists():
+        lines = _env_file.read_text().splitlines()
+
+        def _upsert(key: str, value: str) -> None:
+            for i, line in enumerate(lines):
+                if line.startswith(f"{key} =") or line.startswith(f"{key}="):
+                    lines[i] = f"{key} = {value}"
+                    return
+            lines.append(f"{key} = {value}")
+
+        _upsert("FRAMEIO_API_TOKEN", new_access)
+        if new_refresh:
+            _upsert("FRAMEIO_REFRESH_TOKEN", new_refresh)
+        _env_file.write_text("\n".join(lines) + "\n")
+
+    print("[Frame.io] Access token refreshed successfully.")
+    return True
+
+
+def _ensure_valid_token() -> None:
+    """Refresh the token if it is expired or about to expire."""
+    if _token_is_expiring():
+        _refresh_token()
+
+
 def _headers() -> dict:
+    _ensure_valid_token()
     return {
         "Authorization": f"Bearer {FRAMEIO_TOKEN}",
         "Content-Type": "application/json",
