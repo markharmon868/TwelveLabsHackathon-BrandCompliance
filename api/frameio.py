@@ -142,14 +142,35 @@ def _headers() -> dict:
 
 
 def _get_account_id() -> str:
-    """Return account_id from env or by fetching /v4/me."""
+    """Return account_id from env or by fetching /v4/me (with /v4/accounts fallback)."""
     global _account_id_cache
     if _account_id_cache:
         return _account_id_cache
+
+    # Try /me first — v4 wraps in "data"
     me = get_me()
-    # v4 /me wraps the user in a "data" key
     user = me.get("data", me)
-    _account_id_cache = user["account_id"]
+
+    # Field may be "account_id" directly, or nested in an "accounts" list
+    account_id = user.get("account_id")
+    if not account_id:
+        accounts = user.get("accounts") or []
+        if accounts:
+            account_id = accounts[0].get("id") or accounts[0].get("account_id")
+
+    # Last resort: call /accounts
+    if not account_id:
+        r = requests.get(f"{FRAMEIO_API_BASE}/accounts", headers=_headers())
+        r.raise_for_status()
+        data = r.json()
+        items = data.get("data", data) if isinstance(data, dict) else data
+        if items:
+            account_id = items[0].get("id")
+
+    if not account_id:
+        raise RuntimeError(f"Could not determine Frame.io account_id. /me response: {me}")
+
+    _account_id_cache = account_id
     return _account_id_cache
 
 
