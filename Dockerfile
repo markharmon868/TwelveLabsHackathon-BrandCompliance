@@ -9,6 +9,7 @@ RUN npm run build
 # Stage 2: Python API
 FROM python:3.11-slim
 WORKDIR /app
+ENV PORT=8000
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY api/ ./api/
