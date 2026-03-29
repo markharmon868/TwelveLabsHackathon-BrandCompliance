@@ -16,4 +16,4 @@ COPY brand_compliance/ ./brand_compliance/
 COPY guidelines/ ./guidelines/
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
