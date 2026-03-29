@@ -93,14 +93,9 @@ def _build_search_queries(guidelines: Guidelines) -> list[str]:
         queries = [brand] + [q for q in guidelines.search_queries if q.lower() != brand.lower()]
         return queries
 
-    # Auto-generate: brand name, logo, product, first sentence of description
-    queries = [brand, f"{brand} logo", f"{brand} product"]
-    if guidelines.logo_description:
-        first_sentence = guidelines.logo_description.split(".")[0].strip()
-        if first_sentence and first_sentence.lower() not in (brand.lower(), f"{brand.lower()} logo"):
-            queries.append(first_sentence)
-
-    return queries
+    # Auto-generate: brand name + logo — two queries is enough for recall and
+    # keeps API usage low (TwelveLabs free tier: 50 req/day).
+    return [brand, f"{brand} logo"]
 
 
 def _find_brand_appearances(
