@@ -18,8 +18,8 @@ from typing import Any
 from .client import get_client
 from .models import Appearance, Guidelines, Violation
 
-# Use "low" threshold to return many clips — Pegasus filters in pass 2.
-_SEARCH_THRESHOLD = "low"
+# Use "none" to return all clips regardless of score — Pegasus filters in pass 2.
+_SEARCH_THRESHOLD = "none"
 
 # Cap on brand appearance clips to evaluate (avoids runaway API costs).
 _MAX_BRAND_CLIPS = 20
