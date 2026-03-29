@@ -82,18 +82,20 @@ def _build_search_queries(guidelines: Guidelines) -> list[str]:
     """
     Build a short list of focused visual search queries for Marengo.
 
-    Long prose descriptions score poorly in embedding search — short, concrete
-    phrases work much better. We generate up to 4 queries:
-      1. Brand name alone (catches text on screen)
-      2. "Brand logo" (catches the logo graphic)
-      3. "Brand product" (catches packaging/apparel)
-      4. First sentence of the logo_description (if short) for visual shape recall
+    If the guidelines include explicit search_queries, use those (plus the brand
+    name as a baseline). Otherwise auto-generate from the brand name and logo
+    description. Short, concrete phrases score far better than long prose.
     """
     brand = guidelines.brand
-    queries = [brand, f"{brand} logo", f"{brand} product"]
 
+    if guidelines.search_queries:
+        # Always include the brand name itself; deduplicate
+        queries = [brand] + [q for q in guidelines.search_queries if q.lower() != brand.lower()]
+        return queries
+
+    # Auto-generate: brand name, logo, product, first sentence of description
+    queries = [brand, f"{brand} logo", f"{brand} product"]
     if guidelines.logo_description:
-        # Take only the first sentence so it stays short and focused
         first_sentence = guidelines.logo_description.split(".")[0].strip()
         if first_sentence and first_sentence.lower() not in (brand.lower(), f"{brand.lower()} logo"):
             queries.append(first_sentence)

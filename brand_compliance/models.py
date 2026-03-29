@@ -14,6 +14,7 @@ class Guidelines:
     required_contexts: list[str]                   # contexts the brand SHOULD appear in
     prohibited_contexts: list[str]                 # contexts the brand must NOT appear in
     severity_overrides: dict[str, Literal["minor", "moderate", "critical"]]  # per-context severity
+    search_queries: list[str] = field(default_factory=list)  # optional explicit Marengo search queries
 
     @classmethod
     def from_dict(cls, data: dict) -> "Guidelines":
@@ -24,6 +25,7 @@ class Guidelines:
             required_contexts=data.get("required_contexts", []),
             prohibited_contexts=data.get("prohibited_contexts", []),
             severity_overrides=data.get("severity_overrides", {}),
+            search_queries=data.get("search_queries", []),
         )
 
     def severity_for(self, context: str) -> Literal["minor", "moderate", "critical"]:

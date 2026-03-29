@@ -1,6 +1,15 @@
 {
   "brand": "Nike",
   "logo_description": "Nike Swoosh: a curved checkmark or tick shape, a single fluid arc that is wide on the right and tapers to a point on the left, printed in black or white on athletic shoes, sneakers, sportswear, jerseys, shorts, socks, hats, and bags. The word NIKE often appears in bold uppercase letters alongside or below the Swoosh. Nike products typically feature the Swoosh prominently on the shoe tongue, heel, and upper, and on the left chest of apparel.",
+  "search_queries": [
+    "Nike Swoosh logo",
+    "Nike sneakers",
+    "Nike Cortez shoes",
+    "white Nike athletic shoes",
+    "Nike shoes on feet",
+    "Nike apparel",
+    "swoosh on shoe"
+  ],
   "contracted_screen_time_seconds": 45,
   "required_contexts": [
     "Athletic performance or sports scenes",
