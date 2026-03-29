@@ -256,13 +256,6 @@ def _run_job(job_id: str, video_path: Path, guidelines: Guidelines) -> None:
         _set_status(job_id, "indexing", "Uploading video and waiting for indexing to complete...")
         video_id = upload_video(index_id, video_path, api_key=api_key)
 
-        # Delete the local video file immediately after TwelveLabs has it —
-        # keeps the filesystem clean on ephemeral hosts (Railway, etc.)
-        try:
-            video_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-
         # --- Step 3: run compliance analysis ---
         _set_status(job_id, "analyzing", "Scanning for brand appearances and violations...")
         appearances, violations = analyze_brand_compliance(
