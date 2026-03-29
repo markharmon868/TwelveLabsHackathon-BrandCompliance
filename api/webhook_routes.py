@@ -71,13 +71,18 @@ async def frameio_webhook(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
-    event_name = payload.get("name", "")
-    asset_id = payload.get("resource", {}).get("id")
+    # v4 payload: {"data": {"type": "file.ready", "resource": {"id": "...", "type": "file"}, ...}}
+    # v2 payload: {"name": "asset.created", "resource": {"id": "..."}}
+    data = payload.get("data", payload)
+    event_name = data.get("type") or payload.get("name", "")
+    resource = data.get("resource") or payload.get("resource", {})
+    asset_id = resource.get("id")
 
     print(f"[Frame.io webhook] event={event_name} asset_id={asset_id}")
 
-    # Only process asset.created events
-    if event_name != "asset.created" or not asset_id:
+    # Accept file.ready (v4) or asset.created (v2 legacy)
+    handled_events = {"file.ready", "file.upload.completed", "asset.created"}
+    if event_name not in handled_events or not asset_id:
         return {"status": "ignored", "reason": f"event '{event_name}' not handled"}
 
     # Run audit in background thread to return 200 immediately to Frame.io
