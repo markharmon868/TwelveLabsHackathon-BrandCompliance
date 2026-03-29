@@ -18,8 +18,8 @@ from typing import Any
 from .client import get_client
 from .models import Appearance, Guidelines, Violation
 
-# Marengo confidence threshold for brand appearance search.
-_SEARCH_THRESHOLD = "low"
+# Use "none" to return all clips regardless of score — Pegasus filters in pass 2.
+_SEARCH_THRESHOLD = "none"
 
 # Cap on brand appearance clips to evaluate (avoids runaway API costs).
 _MAX_BRAND_CLIPS = 10
@@ -36,6 +36,7 @@ def analyze_brand_compliance(
     index_id: str,
     video_id: str,
     guidelines: Guidelines,
+    api_key: str | None = None,
 ) -> tuple[list[Appearance], list[Violation]]:
     """
     Scan a video for brand appearances and compliance violations.
@@ -45,7 +46,7 @@ def analyze_brand_compliance(
     appearances : every clip where the brand was detected (compliant / violation / needs_review)
     violations  : subset of appearances that breach a prohibited context rule
     """
-    client = get_client()
+    client = get_client(api_key)
 
     # --- Pass 1: find all brand appearance clips via Marengo ---
     print(f"  Searching for '{guidelines.brand}' appearances...")
@@ -99,7 +100,7 @@ def _find_brand_appearances(
             results = client.search.create(
                 index_id=index_id,
                 query_text=query,
-                search_options=["visual", "audio"],
+                search_options=["visual"],
                 threshold=_SEARCH_THRESHOLD,
                 group_by="clip",
                 page_limit=_MAX_BRAND_CLIPS,

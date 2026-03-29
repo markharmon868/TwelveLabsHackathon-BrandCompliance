@@ -65,16 +65,32 @@ class JobSchema(BaseModel):
     brand: str
     video_filename: str
     guidelines_filename: str
-    video_url: str | None = None    # relative URL to stream the video, e.g. /videos/uuid.mp4
+    video_url: str | None = None
     created_at: datetime
     completed_at: datetime | None = None
     error: str | None = None
     report: ReportSchema | None = None
+    # Review decision
+    review_status: Literal["approved", "rejected", "escalated"] | None = None
+    review_notes: str | None = None
+    reviewed_at: datetime | None = None
+    # Frame.io provenance
+    frame_io_asset_id: str | None = None
+    source: Literal["upload", "webhook", "custom_action"] = "upload"
 
 
 class JobListSchema(BaseModel):
     jobs: list[JobSchema]
     total: int
+
+
+# ---------------------------------------------------------------------------
+# Review request
+# ---------------------------------------------------------------------------
+
+class ReviewRequestSchema(BaseModel):
+    decision: Literal["approved", "rejected", "escalated"]
+    notes: str | None = None
 
 
 # ---------------------------------------------------------------------------

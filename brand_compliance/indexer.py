@@ -1,4 +1,3 @@
-import time
 from pathlib import Path
 from twelvelabs.indexes.types import IndexesCreateRequestModelsItem
 from .client import get_client
@@ -18,17 +17,17 @@ _MODELS = [
     ),
 ]
 
-_POLL_INTERVAL = 10  # seconds between status checks
+_POLL_INTERVAL = 3  # seconds between status checks
 
 
-def create_index(index_name: str) -> str:
+def create_index(index_name: str, api_key: str | None = None) -> str:
     """
     Create a new TwelveLabs index configured for brand compliance analysis.
     If an index with the same name already exists, returns its ID instead.
 
     Returns the index_id.
     """
-    client = get_client()
+    client = get_client(api_key)
 
     # Check for an existing index with this name to avoid 409 errors on re-runs
     existing = list(client.indexes.list(index_name=index_name, page_limit=1))
@@ -44,7 +43,7 @@ def create_index(index_name: str) -> str:
     return response.id
 
 
-def upload_video(index_id: str, video_path: str | Path) -> str:
+def upload_video(index_id: str, video_path: str | Path, api_key: str | None = None) -> str:
     """
     Upload a video file to the given index and wait for indexing to complete.
 
@@ -55,7 +54,7 @@ def upload_video(index_id: str, video_path: str | Path) -> str:
     if not video_path.exists():
         raise FileNotFoundError(f"Video file not found: {video_path}")
 
-    client = get_client()
+    client = get_client(api_key)
 
     print(f"Uploading '{video_path.name}' to index {index_id}...")
     with video_path.open("rb") as f:
@@ -64,22 +63,14 @@ def upload_video(index_id: str, video_path: str | Path) -> str:
             video_file=f,
         )
 
-    task_id = task.id
-    print(f"Upload complete. Task ID: {task_id}. Waiting for indexing...")
+    print(f"Upload complete. Task ID: {task.id}. Waiting for indexing...")
 
-    while True:
-        status_response = client.tasks.retrieve(task_id)
-        status = status_response.status
+    task = client.tasks.wait_for_done(task.id, sleep_interval=_POLL_INTERVAL)
 
-        if status == "ready":
-            video_id = status_response.video_id
-            print(f"Indexing complete. Video ID: {video_id}")
-            return video_id
+    if task.status == "failed":
+        raise RuntimeError(
+            f"Indexing task {task.id} failed. Check the TwelveLabs dashboard."
+        )
 
-        if status == "failed":
-            raise RuntimeError(
-                f"Indexing task {task_id} failed. Check the TwelveLabs dashboard."
-            )
-
-        print(f"  Status: {status} — checking again in {_POLL_INTERVAL}s...")
-        time.sleep(_POLL_INTERVAL)
+    print(f"Indexing complete. Video ID: {task.video_id}")
+    return task.video_id

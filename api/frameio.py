@@ -286,6 +286,30 @@ def post_violation_comments(asset_id: str, violations: list, brand: str) -> None
             print(f"    Failed to post comment at {v.timestamp_start}s: {e}")
 
 
+def post_review_decision(
+    asset_id: str,
+    decision: str,
+    brand: str,
+    notes: str | None = None,
+) -> None:
+    """Post the compliance review decision as a pinned comment at timestamp 0."""
+    icons  = {"approved": "✅", "rejected": "❌", "escalated": "⚠️"}
+    labels = {"approved": "APPROVED FOR DELIVERY", "rejected": "REJECTED — REVISIONS REQUIRED", "escalated": "ESCALATED FOR REVIEW"}
+
+    lines = [
+        f"{icons.get(decision, '📋')} Compliance Decision: {labels.get(decision, decision.upper())}",
+        f"Brand: {brand}",
+    ]
+    if notes:
+        lines.append(f"\nReviewer notes: {notes}")
+    lines.append("\nReviewed via The Obsidian Lens | Brand Compliance Auditor")
+
+    try:
+        post_comment(asset_id, "\n".join(lines), timestamp_seconds=0)
+    except Exception as e:
+        print(f"[Frame.io] Failed to post review decision: {e}")
+
+
 def post_summary_comment(asset_id: str, brand: str, report) -> None:
     """Post a top-level summary comment at timestamp 0."""
     status_icon = "✅" if report.is_compliant else "❌"
@@ -329,6 +353,37 @@ def get_workspaces(account_id: str | None = None) -> list[dict]:
     if isinstance(data, dict):
         return data.get("data", [])
     return data
+
+
+# ---------------------------------------------------------------------------
+# Custom Actions
+# ---------------------------------------------------------------------------
+
+def register_custom_action(
+    account_id: str,
+    name: str,
+    url: str,
+    description: str = "",
+) -> dict:
+    """
+    Register a Custom Action that appears in the Frame.io asset context menu.
+    Returns the created custom action object.
+    """
+    payload = {
+        "data": {
+            "name": name,
+            "description": description,
+            "url": url,
+            "resource_types": ["file"],
+        }
+    }
+    r = requests.post(
+        f"{FRAMEIO_API_BASE}/accounts/{account_id}/custom-actions",
+        json=payload,
+        headers=_headers(),
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 # ---------------------------------------------------------------------------

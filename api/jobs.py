@@ -1,12 +1,13 @@
 """
-In-memory job store and background processing.
+Job store with SQLite persistence.
 
-Each job runs in its own thread (TwelveLabs SDK is synchronous).
-Job state is kept in a module-level dict — sufficient for the hackathon.
-For production this would be replaced with a database + task queue.
+Each job is stored as a JSON blob so the full JobSchema survives server
+restarts.  The threading model (one daemon thread per job) is unchanged.
 """
 
 import json
+import os
+import sqlite3
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -29,14 +30,111 @@ from .schemas import (
 )
 
 # ---------------------------------------------------------------------------
-# In-memory store
+# Paths
 # ---------------------------------------------------------------------------
 
-_jobs: dict[str, dict] = {}
-_lock = threading.Lock()
-
+_DATA_DIR = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent.parent)))
 GUIDELINES_DIR = Path(__file__).parent.parent / "guidelines"
-VIDEOS_DIR = Path(__file__).parent.parent / "videos"
+VIDEOS_DIR = _DATA_DIR / "videos"
+DB_PATH = _DATA_DIR / "jobs.db"
+
+# ---------------------------------------------------------------------------
+# SQLite setup  (one connection per thread via thread-local storage)
+# ---------------------------------------------------------------------------
+
+_local = threading.local()
+_schema_lock = threading.Lock()
+
+
+def _get_conn() -> sqlite3.Connection:
+    """Return a per-thread SQLite connection, creating it on first use."""
+    if not hasattr(_local, "conn"):
+        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        _local.conn = conn
+        _ensure_schema(conn)
+    return _local.conn
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    with _schema_lock:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS jobs (
+                job_id   TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                data     TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Low-level read / write helpers
+# ---------------------------------------------------------------------------
+
+def _write_job(job: dict) -> None:
+    """Persist (insert or replace) a job dict."""
+    conn = _get_conn()
+    conn.execute(
+        "INSERT OR REPLACE INTO jobs (job_id, created_at, data) VALUES (?, ?, ?)",
+        (job["job_id"], job["created_at"].isoformat(), _dump(job)),
+    )
+    conn.commit()
+
+
+def _dump(job: dict) -> str:
+    """Serialize job dict to JSON, handling datetime + Pydantic objects."""
+    def default(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if hasattr(obj, "model_dump"):  # Pydantic v2
+            return obj.model_dump()
+        if hasattr(obj, "dict"):        # Pydantic v1
+            return obj.dict()
+        raise TypeError(f"Not serializable: {type(obj)}")
+
+    return json.dumps(job, default=default)
+
+
+def _load(row_data: str) -> dict:
+    """Deserialize a job dict from JSON, restoring datetime fields."""
+    raw = json.loads(row_data)
+    for field in ("created_at", "completed_at", "reviewed_at"):
+        if raw.get(field):
+            raw[field] = datetime.fromisoformat(raw[field])
+    return raw
+
+
+# ---------------------------------------------------------------------------
+# In-memory write-through cache (avoids repeated DB reads during hot paths)
+# ---------------------------------------------------------------------------
+
+_cache: dict[str, dict] = {}
+_cache_lock = threading.Lock()
+
+
+def _cache_put(job: dict) -> None:
+    with _cache_lock:
+        _cache[job["job_id"]] = job
+
+
+def _cache_get(job_id: str) -> dict | None:
+    with _cache_lock:
+        return _cache.get(job_id)
+
+
+def _load_all_from_db() -> None:
+    """Populate the in-memory cache from SQLite on startup."""
+    conn = _get_conn()
+    for row in conn.execute("SELECT data FROM jobs ORDER BY created_at DESC"):
+        job = _load(row["data"])
+        _cache[job["job_id"]] = job
+
+
+# Eagerly populate cache at import time so list_jobs() is fast.
+_load_all_from_db()
 
 
 # ---------------------------------------------------------------------------
@@ -48,22 +146,32 @@ def create_job(
     guidelines: Guidelines,
     video_filename: str,
     guidelines_filename: str,
+    frame_io_asset_id: str | None = None,
+    source: str = "upload",
+    api_key: str | None = None,
 ) -> str:
     job_id = str(uuid.uuid4())
-    with _lock:
-        _jobs[job_id] = {
-            "job_id": job_id,
-            "status": "queued",
-            "progress_message": "Job queued — waiting to start",
-            "brand": guidelines.brand,
-            "video_filename": video_filename,
-            "guidelines_filename": guidelines_filename,
-            "video_url": f"/videos/{video_path.name}",
-            "created_at": datetime.now(timezone.utc),
-            "completed_at": None,
-            "error": None,
-            "report": None,
-        }
+    job: dict = {
+        "job_id": job_id,
+        "status": "queued",
+        "progress_message": "Job queued — waiting to start",
+        "brand": guidelines.brand,
+        "video_filename": video_filename,
+        "guidelines_filename": guidelines_filename,
+        "video_url": f"/videos/{video_path.name}",
+        "created_at": datetime.now(timezone.utc),
+        "completed_at": None,
+        "error": None,
+        "report": None,
+        "review_status": None,
+        "review_notes": None,
+        "reviewed_at": None,
+        "frame_io_asset_id": frame_io_asset_id,
+        "source": source,
+        "_api_key": api_key,  # not exposed in JobSchema, stripped on serialisation
+    }
+    _cache_put(job)
+    _write_job(job)
 
     thread = threading.Thread(
         target=_run_job,
@@ -75,18 +183,30 @@ def create_job(
 
 
 def get_job(job_id: str) -> JobSchema | None:
-    with _lock:
-        raw = _jobs.get(job_id)
+    raw = _cache_get(job_id)
     if raw is None:
         return None
     return JobSchema(**raw)
 
 
 def list_jobs() -> list[JobSchema]:
-    with _lock:
-        snapshot = list(_jobs.values())
+    with _cache_lock:
+        snapshot = list(_cache.values())
     snapshot.sort(key=lambda j: j["created_at"], reverse=True)
     return [JobSchema(**j) for j in snapshot]
+
+
+def review_job(job_id: str, decision: str, notes: str | None) -> JobSchema | None:
+    """Record a compliance review decision on a completed job."""
+    with _cache_lock:
+        job = _cache.get(job_id)
+        if job is None:
+            return None
+        job["review_status"] = decision
+        job["review_notes"] = notes
+        job["reviewed_at"] = datetime.now(timezone.utc)
+    _write_job(job)
+    return JobSchema(**job)
 
 
 def list_sample_guidelines() -> list[GuidelinesSampleSchema]:
@@ -95,7 +215,8 @@ def list_sample_guidelines() -> list[GuidelinesSampleSchema]:
         try:
             with path.open() as f:
                 data = json.load(f)
-            g = Guidelines.from_dict(data)
+            from brand_compliance.models import Guidelines as GL
+            g = GL.from_dict(data)
             samples.append(GuidelinesSampleSchema(
                 filename=path.name,
                 brand=g.brand,
@@ -113,21 +234,34 @@ def list_sample_guidelines() -> list[GuidelinesSampleSchema]:
 # ---------------------------------------------------------------------------
 
 def _set_status(job_id: str, status: str, message: str) -> None:
-    with _lock:
-        _jobs[job_id]["status"] = status
-        _jobs[job_id]["progress_message"] = message
+    with _cache_lock:
+        job = _cache.get(job_id)
+        if job:
+            job["status"] = status
+            job["progress_message"] = message
+    if job:
+        _write_job(job)
 
 
 def _run_job(job_id: str, video_path: Path, guidelines: Guidelines) -> None:
+    api_key: str | None = (_cache.get(job_id) or {}).get("_api_key")
+
     try:
         # --- Step 1: create / reuse index ---
         _set_status(job_id, "indexing", "Creating or locating TwelveLabs index...")
         index_name = guidelines.brand.lower().replace(" ", "_") + "_compliance"
-        index_id = create_index(index_name)
+        index_id = create_index(index_name, api_key=api_key)
 
         # --- Step 2: upload and index video ---
         _set_status(job_id, "indexing", "Uploading video and waiting for indexing to complete...")
-        video_id = upload_video(index_id, video_path)
+        video_id = upload_video(index_id, video_path, api_key=api_key)
+
+        # Delete the local video file immediately after TwelveLabs has it —
+        # keeps the filesystem clean on ephemeral hosts (Railway, etc.)
+        try:
+            video_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
         # --- Step 3: run compliance analysis ---
         _set_status(job_id, "analyzing", "Scanning for brand appearances and violations...")
@@ -135,6 +269,7 @@ def _run_job(job_id: str, video_path: Path, guidelines: Guidelines) -> None:
             index_id=index_id,
             video_id=video_id,
             guidelines=guidelines,
+            api_key=api_key,
         )
 
         # --- Step 4: build report ---
@@ -148,21 +283,29 @@ def _run_job(job_id: str, video_path: Path, guidelines: Guidelines) -> None:
             violations=violations,
         )
 
-        with _lock:
-            _jobs[job_id]["status"] = "complete"
-            _jobs[job_id]["progress_message"] = "Audit complete"
-            _jobs[job_id]["completed_at"] = datetime.now(timezone.utc)
-            _jobs[job_id]["report"] = _serialize_report(
-                report,
-                video_filename=_jobs[job_id]["video_filename"],
-            )
+        with _cache_lock:
+            job = _cache.get(job_id)
+            if job:
+                job["status"] = "complete"
+                job["progress_message"] = "Audit complete"
+                job["completed_at"] = datetime.now(timezone.utc)
+                job["report"] = _serialize_report(
+                    report,
+                    video_filename=job["video_filename"],
+                )
+        if job:
+            _write_job(job)
 
     except Exception as exc:
-        with _lock:
-            _jobs[job_id]["status"] = "failed"
-            _jobs[job_id]["progress_message"] = f"Job failed: {exc}"
-            _jobs[job_id]["error"] = str(exc)
-            _jobs[job_id]["completed_at"] = datetime.now(timezone.utc)
+        with _cache_lock:
+            job = _cache.get(job_id)
+            if job:
+                job["status"] = "failed"
+                job["progress_message"] = f"Job failed: {exc}"
+                job["error"] = str(exc)
+                job["completed_at"] = datetime.now(timezone.utc)
+        if job:
+            _write_job(job)
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,8 @@ export type Severity = "minor" | "moderate" | "critical";
 export type AppearanceStatus = "compliant" | "violation" | "needs_review";
 export type DeliveryStatus = "COMPLIANT" | "VIOLATION" | "UNDER-DELIVERED";
 export type JobStatus = "queued" | "indexing" | "analyzing" | "complete" | "failed";
+export type ReviewStatus = "approved" | "rejected" | "escalated";
+export type JobSource = "upload" | "webhook" | "custom_action";
 
 export interface Violation {
   timestamp_start: number;
@@ -55,6 +57,11 @@ export interface Job {
   completed_at: string | null;
   error: string | null;
   report: Report | null;
+  review_status: ReviewStatus | null;
+  review_notes: string | null;
+  reviewed_at: string | null;
+  frame_io_asset_id: string | null;
+  source: JobSource;
 }
 
 export interface GuidelinesSample {
@@ -63,4 +70,13 @@ export interface GuidelinesSample {
   prohibited_count: number;
   required_count: number;
   contracted_screen_time_seconds: number;
+}
+
+export interface GuidelinesData {
+  brand: string;
+  logo_description: string;
+  contracted_screen_time_seconds: number;
+  required_contexts: string[];
+  prohibited_contexts: string[];
+  severity_overrides: Record<string, string>;
 }

@@ -163,13 +163,5 @@ def oauth_callback(
     _write_env_tokens(access_token, refresh_token)
     print(f"[OAuth] Tokens stored. access_token length={len(access_token)}")
 
-    return HTMLResponse(
-        content="""
-        <html><body style="font-family:sans-serif;padding:2em">
-        <h2>✅ Frame.io OAuth complete</h2>
-        <p>Access token stored in <code>.env</code> and active immediately.</p>
-        <p>You can close this tab.</p>
-        </body></html>
-        """,
-        status_code=200,
-    )
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+    return RedirectResponse(url=f"{frontend_url}/integrations?connected=1", status_code=302)

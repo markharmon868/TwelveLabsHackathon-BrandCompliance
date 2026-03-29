@@ -8,9 +8,9 @@ function fmtTime(s: number) {
 }
 
 const STATUS_STYLES = {
-  compliant:    { bg: "bg-green-500/10 border-green-500/30",  label: "Compliant",    icon: "✓", color: "text-green-400" },
-  violation:    { bg: "bg-red-500/10 border-red-500/30",      label: "Violation",    icon: "✗", color: "text-red-400" },
-  needs_review: { bg: "bg-slate-500/10 border-slate-500/30",  label: "Needs Review", icon: "?", color: "text-slate-400" },
+  compliant:    { bg: "bg-teal/5",       label: "Compliant",    icon: "check_circle", color: "text-teal" },
+  violation:    { bg: "bg-rose-dark/20", label: "Violation",    icon: "cancel",       color: "text-rose" },
+  needs_review: { bg: "bg-obs-top",      label: "Needs Review", icon: "help",         color: "text-muted" },
 };
 
 interface Props {
@@ -21,8 +21,8 @@ interface Props {
 export default function AppearanceDetail({ appearance, onClose }: Props) {
   if (!appearance) {
     return (
-      <div className="bg-[#1a1d27] border border-[#2a2d3a] rounded-xl p-6 flex items-center justify-center min-h-[200px]">
-        <p className="text-slate-500 text-sm">Click a segment on the timeline to inspect it</p>
+      <div className="bg-obs-mid rounded-xl p-6 flex items-center justify-center min-h-[120px]">
+        <p className="text-muted/40 text-sm">Click a segment on the timeline to inspect it</p>
       </div>
     );
   }
@@ -30,53 +30,51 @@ export default function AppearanceDetail({ appearance, onClose }: Props) {
   const style = STATUS_STYLES[appearance.status];
 
   return (
-    <div className={`border rounded-xl p-5 ${style.bg}`}>
+    <div className={`rounded-xl p-5 ${style.bg}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className={`text-lg font-bold ${style.color}`}>{style.icon}</span>
-          <span className={`font-semibold ${style.color}`}>{style.label}</span>
-          {appearance.violation && (
-            <SeverityBadge severity={appearance.violation.severity} />
-          )}
+          <span className={`material-symbols-outlined ${style.color}`} style={{ fontSize: "18px" }}>
+            {style.icon}
+          </span>
+          <span className={`font-semibold text-sm ${style.color}`}>{style.label}</span>
+          {appearance.violation && <SeverityBadge severity={appearance.violation.severity} />}
         </div>
         <button
           onClick={onClose}
-          className="text-slate-500 hover:text-slate-300 text-lg leading-none"
+          className="text-muted/40 hover:text-muted transition-colors"
         >
-          ×
+          <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>close</span>
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+      <div className="grid grid-cols-2 gap-3 mb-4">
         <div>
-          <span className="text-slate-500">Timestamp</span>
-          <p className="text-white font-mono mt-0.5">
+          <span className="text-[10px] text-muted uppercase tracking-widest block mb-1">Timestamp</span>
+          <p className="text-vio-text font-mono text-sm">
             {fmtTime(appearance.timestamp_start)} → {fmtTime(appearance.timestamp_end)}
           </p>
         </div>
         <div>
-          <span className="text-slate-500">Duration</span>
-          <p className="text-white mt-0.5">
+          <span className="text-[10px] text-muted uppercase tracking-widest block mb-1">Duration</span>
+          <p className="text-vio-text text-sm">
             {(appearance.timestamp_end - appearance.timestamp_start).toFixed(1)}s
           </p>
         </div>
         <div>
-          <span className="text-slate-500">Confidence</span>
-          <p className="text-white mt-0.5">{(appearance.confidence * 100).toFixed(0)}%</p>
+          <span className="text-[10px] text-muted uppercase tracking-widest block mb-1">Confidence</span>
+          <p className="text-vio-text text-sm">{(appearance.confidence * 100).toFixed(0)}%</p>
         </div>
         {appearance.violation && (
           <div>
-            <span className="text-slate-500">Violated Rule</span>
-            <p className="text-red-300 mt-0.5 text-xs leading-snug">
-              {appearance.violation.prohibited_context}
-            </p>
+            <span className="text-[10px] text-muted uppercase tracking-widest block mb-1">Violated Rule</span>
+            <p className="text-rose text-xs leading-snug">{appearance.violation.prohibited_context}</p>
           </div>
         )}
       </div>
 
       <div>
-        <span className="text-slate-500 text-sm">Analysis</span>
-        <p className="text-slate-200 text-sm mt-1.5 leading-relaxed">{appearance.explanation}</p>
+        <span className="text-[10px] text-muted uppercase tracking-widest block mb-1">Analysis</span>
+        <p className="text-vio-text/80 text-sm leading-relaxed">{appearance.explanation}</p>
       </div>
     </div>
   );

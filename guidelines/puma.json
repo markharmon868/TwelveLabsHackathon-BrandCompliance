@@ -1,0 +1,16 @@
+{
+  "brand": "Puma",
+  "logo_description": "Puma logo: a leaping panther or cougar silhouette bounding to the right, usually in black or white, printed on athletic shoes, sneakers, sportswear, jerseys, t-shirts, shorts, bags, and socks. The word PUMA often appears alongside the cat icon in bold uppercase letters.",
+  "contracted_screen_time_seconds": 30,
+  "required_contexts": [
+    "Athletic and sports scenes"
+  ],
+  "prohibited_contexts": [
+    "other brand logos",
+    "competitor brand products"
+  ],
+  "severity_overrides": {
+    "other brand logos": "critical",
+    "competitor brand products": "critical"
+  }
+}

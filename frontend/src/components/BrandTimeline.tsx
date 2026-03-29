@@ -3,9 +3,9 @@ import type { Appearance, Report } from "../types";
 import AppearanceDetail from "./AppearanceDetail";
 
 const SEGMENT_COLOR: Record<string, string> = {
-  compliant:    "#22c55e",
-  violation:    "#ef4444",
-  needs_review: "#6b7280",
+  compliant:    "#47d6ff",
+  violation:    "#ffb4ab",
+  needs_review: "#464556",
 };
 
 function fmtTime(s: number) {
@@ -25,7 +25,6 @@ export default function BrandTimeline({ report, videoUrl }: Props) {
   const [currentTime, setCurrentTime] = useState(0);
   const [selected, setSelected] = useState<Appearance | null>(null);
 
-  // Use last appearance end as fallback duration before video loads
   const effectiveDuration = duration > 0
     ? duration
     : Math.max(...report.appearances.map(a => a.timestamp_end), 30);
@@ -56,7 +55,6 @@ export default function BrandTimeline({ report, videoUrl }: Props) {
     seekTo(ratio * effectiveDuration);
   };
 
-  // Tick marks every 10s up to duration
   const ticks = Array.from(
     { length: Math.floor(effectiveDuration / 10) + 1 },
     (_, i) => i * 10
@@ -65,9 +63,8 @@ export default function BrandTimeline({ report, videoUrl }: Props) {
   const playheadPct = (currentTime / effectiveDuration) * 100;
 
   return (
-    <div className="bg-[#1a1d27] border border-[#2a2d3a] rounded-xl overflow-hidden">
-      {/* Video player */}
-      <div className="bg-black">
+    <div className="bg-obs-low rounded-xl overflow-hidden">
+      <div className="bg-obs-base">
         <video
           ref={videoRef}
           src={videoUrl}
@@ -79,41 +76,36 @@ export default function BrandTimeline({ report, videoUrl }: Props) {
       </div>
 
       <div className="p-5">
-        <h3 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wider">
+        <h3 className="text-[11px] font-bold text-muted uppercase tracking-widest mb-4">
           Brand Appearance Timeline
         </h3>
 
         {report.appearances.length === 0 ? (
-          <div className="text-center py-6 text-slate-500 text-sm">
-            No brand appearances detected in this video.
+          <div className="text-center py-6 text-muted/50 text-sm">
+            No brand appearances detected.
           </div>
         ) : (
           <>
-            {/* Legend */}
-            <div className="flex gap-4 mb-3 text-xs text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Compliant
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Violation
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-slate-500 inline-block" /> Needs Review
-              </span>
+            <div className="flex gap-5 mb-3 text-xs text-muted">
+              {[
+                { color: "#47d6ff", label: "Compliant" },
+                { color: "#ffb4ab", label: "Violation" },
+                { color: "#464556", label: "Needs Review" },
+              ].map(({ color, label }) => (
+                <span key={label} className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm inline-block" style={{ background: color }} />
+                  {label}
+                </span>
+              ))}
             </div>
 
-            {/* Timeline bar */}
             <div
-              className="relative h-10 bg-[#0f1117] rounded-lg cursor-crosshair overflow-visible select-none"
+              className="relative h-10 bg-obs-base rounded-lg cursor-crosshair overflow-visible select-none"
               onClick={handleTimelineClick}
             >
-              {/* Segments */}
               {report.appearances.map((a, i) => {
                 const left = (a.timestamp_start / effectiveDuration) * 100;
-                const width = Math.max(
-                  0.5,
-                  ((a.timestamp_end - a.timestamp_start) / effectiveDuration) * 100
-                );
+                const width = Math.max(0.5, ((a.timestamp_end - a.timestamp_start) / effectiveDuration) * 100);
                 const isSelected = selected === a;
                 return (
                   <div
@@ -123,8 +115,8 @@ export default function BrandTimeline({ report, videoUrl }: Props) {
                       left: `${left}%`,
                       width: `${width}%`,
                       backgroundColor: SEGMENT_COLOR[a.status],
-                      opacity: isSelected ? 1 : 0.75,
-                      outline: isSelected ? `2px solid white` : "none",
+                      opacity: isSelected ? 1 : 0.7,
+                      outline: isSelected ? "2px solid rgba(195,193,255,0.8)" : "none",
                       outlineOffset: "1px",
                       zIndex: isSelected ? 10 : 1,
                     }}
@@ -133,20 +125,17 @@ export default function BrandTimeline({ report, videoUrl }: Props) {
                   />
                 );
               })}
-
-              {/* Playhead */}
               <div
-                className="absolute top-0 bottom-0 w-0.5 bg-white/80 pointer-events-none z-20"
-                style={{ left: `${playheadPct}%` }}
+                className="absolute top-0 bottom-0 w-0.5 pointer-events-none z-20"
+                style={{ left: `${playheadPct}%`, background: "rgba(195,193,255,0.8)" }}
               />
             </div>
 
-            {/* Time ruler */}
             <div className="relative h-5 mt-1">
               {ticks.map(t => (
                 <span
                   key={t}
-                  className="absolute text-[10px] text-slate-600 -translate-x-1/2"
+                  className="absolute text-[10px] text-muted/40 -translate-x-1/2"
                   style={{ left: `${(t / effectiveDuration) * 100}%` }}
                 >
                   {fmtTime(t)}
@@ -156,12 +145,8 @@ export default function BrandTimeline({ report, videoUrl }: Props) {
           </>
         )}
 
-        {/* Detail panel */}
         <div className="mt-4">
-          <AppearanceDetail
-            appearance={selected}
-            onClose={() => setSelected(null)}
-          />
+          <AppearanceDetail appearance={selected} onClose={() => setSelected(null)} />
         </div>
       </div>
     </div>

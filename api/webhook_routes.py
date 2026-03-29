@@ -26,21 +26,16 @@ from .frameio import (
 from .jobs import (
     GUIDELINES_DIR,
     VIDEOS_DIR,
-    _jobs,
-    _lock,
+    _cache,
+    _cache_lock,
     _run_job,
     create_job,
 )
+from .frameio_config import load_config
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 FRAMEIO_WEBHOOK_SECRET = os.getenv("FRAMEIO_WEBHOOK_SECRET", "").strip()
-
-# Default guidelines file to use for Frame.io-triggered audits.
-# Can be overridden via env var.
-DEFAULT_GUIDELINES_FILE = os.getenv(
-    "FRAMEIO_DEFAULT_GUIDELINES", "pureflow_water.json"
-)
 
 
 @router.post("/frameio", status_code=status.HTTP_200_OK)
@@ -88,7 +83,7 @@ async def frameio_webhook(
     # Run audit in background thread to return 200 immediately to Frame.io
     thread = threading.Thread(
         target=_process_frameio_asset,
-        args=(asset_id,),
+        args=(asset_id, "webhook"),
         daemon=True,
     )
     thread.start()
@@ -96,7 +91,54 @@ async def frameio_webhook(
     return {"status": "accepted", "asset_id": asset_id}
 
 
-def _process_frameio_asset(asset_id: str) -> None:
+@router.post("/frameio-action", status_code=status.HTTP_200_OK)
+async def frameio_custom_action(
+    request: Request,
+    x_frameio_request_timestamp: str = Header(default=""),
+    x_frameio_signature: str = Header(default=""),
+) -> dict:
+    """
+    Receives Frame.io Custom Action triggers.
+    Fires when an editor right-clicks an asset and chooses
+    'Submit for Compliance Review' in Frame.io.
+    """
+    body = await request.body()
+
+    if FRAMEIO_WEBHOOK_SECRET:
+        valid = verify_webhook_signature(
+            body=body,
+            timestamp_header=x_frameio_request_timestamp,
+            signature_header=x_frameio_signature,
+            secret=FRAMEIO_WEBHOOK_SECRET,
+        )
+        if not valid:
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    data = payload.get("data", payload)
+    resource = data.get("resource") or {}
+    asset_id = resource.get("id")
+
+    if not asset_id:
+        return {"status": "ignored", "reason": "no asset_id in payload"}
+
+    print(f"[Frame.io custom action] asset_id={asset_id}")
+
+    thread = threading.Thread(
+        target=_process_frameio_asset,
+        args=(asset_id, "custom_action"),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"status": "accepted", "asset_id": asset_id}
+
+
+def _process_frameio_asset(asset_id: str, source: str = "webhook") -> None:
     """
     Background task: fetch asset → download video → run audit → post comments.
     """
@@ -115,11 +157,13 @@ def _process_frameio_asset(asset_id: str) -> None:
 
     print(f"[Frame.io] Video asset: {asset.get('name')} ({asset.get('filetype')})")
 
-    # --- Load guidelines ---
-    guidelines_path = GUIDELINES_DIR / DEFAULT_GUIDELINES_FILE
-    if not guidelines_path.exists():
-        # Fall back to first available guidelines file
-        available = list(GUIDELINES_DIR.glob("*.json"))
+    # --- Load guidelines from config (falls back to first available) ---
+    cfg = load_config()
+    default_file = cfg.get("default_guidelines", "")
+    guidelines_path = GUIDELINES_DIR / default_file if default_file else None
+
+    if not guidelines_path or not guidelines_path.exists():
+        available = sorted(GUIDELINES_DIR.glob("*.json"))
         if not available:
             print("[Frame.io] No guidelines files found — skipping audit")
             return
@@ -148,6 +192,8 @@ def _process_frameio_asset(asset_id: str) -> None:
         guidelines=guidelines,
         video_filename=asset.get("name", video_path.name),
         guidelines_filename=guidelines_path.name,
+        frame_io_asset_id=asset_id,
+        source=source,
     )
     print(f"[Frame.io] Created job {job_id} for asset {asset_id}")
 
@@ -160,8 +206,8 @@ def _process_frameio_asset(asset_id: str) -> None:
     while elapsed < max_wait:
         time.sleep(poll_interval)
         elapsed += poll_interval
-        with _lock:
-            job = _jobs.get(job_id)
+        with _cache_lock:
+            job = _cache.get(job_id)
         if not job:
             break
         if job["status"] == "complete":

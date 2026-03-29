@@ -10,6 +10,9 @@ export default defineConfig({
       "/guidelines": "http://localhost:8000",
       "/videos": "http://localhost:8000",
       "/health": "http://localhost:8000",
+      "/oauth": "http://localhost:8000",
+      "/frameio": "http://localhost:8000",
+      "/webhooks": "http://localhost:8000",
     },
   },
 });
