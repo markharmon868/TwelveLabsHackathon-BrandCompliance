@@ -105,11 +105,14 @@ def register_frameio_custom_action(data: dict = Body(...)) -> dict:
         )
         action_data = result.get("data", result)
         action_id = action_data.get("id", "")
+        save_config({"custom_action_id": action_id, "custom_action_url": action_url})
+        return {"custom_action_id": action_id, "status": "registered"}
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to register custom action: {e}")
-
-    save_config({"custom_action_id": action_id, "custom_action_url": action_url})
-    return {"custom_action_id": action_id, "status": "registered"}
+        # Custom Actions API may not be available in all Frame.io v4 accounts.
+        # Treat as a soft failure — webhook integration still works.
+        print(f"[frameio] Custom action registration skipped: {e}")
+        save_config({"custom_action_url": action_url})
+        return {"custom_action_id": "", "status": "skipped", "reason": str(e)}
 
 
 @router.post("/webhook/register")

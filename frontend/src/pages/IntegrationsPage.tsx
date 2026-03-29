@@ -65,7 +65,7 @@ export default function IntegrationsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const isActive = !!(config?.webhook_id && config?.custom_action_id);
+  const isActive = !!config?.webhook_id;
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,8 +87,12 @@ export default function IntegrationsPage() {
       // 2. Register webhook
       await registerFrameioWebhook(workspaceId, `${base}/webhooks/frameio`);
 
-      // 3. Register custom action
-      await registerFrameioCustomAction(`${base}/webhooks/frameio-action`);
+      // 3. Register custom action (best-effort — may not be available in all accounts)
+      try {
+        await registerFrameioCustomAction(`${base}/webhooks/frameio-action`);
+      } catch {
+        // Custom Actions API is not available in all Frame.io v4 plans — skip silently
+      }
 
       // 4. Save default policy
       if (defaultPolicy) {
