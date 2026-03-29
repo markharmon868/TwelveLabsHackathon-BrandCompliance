@@ -37,6 +37,11 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 FRAMEIO_WEBHOOK_SECRET = os.getenv("FRAMEIO_WEBHOOK_SECRET", "").strip()
 
+# Track asset IDs currently being processed to deduplicate rapid duplicate events.
+# Populated synchronously before the thread starts, so the check is race-free.
+_in_flight_assets: set[str] = set()
+_in_flight_lock = threading.Lock()
+
 
 @router.post("/frameio", status_code=status.HTTP_200_OK)
 async def frameio_webhook(
@@ -80,16 +85,22 @@ async def frameio_webhook(
     if event_name not in handled_events or not asset_id:
         return {"status": "ignored", "reason": f"event '{event_name}' not handled"}
 
-    # Deduplicate: skip if a job for this asset is already running or complete
-    with _cache_lock:
-        existing = [
-            j for j in _cache.values()
-            if j.get("frame_io_asset_id") == asset_id
-            and j.get("status") not in ("failed",)
-        ]
-    if existing:
-        print(f"[Frame.io webhook] Duplicate event for {asset_id} — already have job {existing[0]['job_id']}, skipping")
-        return {"status": "duplicate", "asset_id": asset_id}
+    # Deduplicate: claim the asset_id atomically before starting the thread.
+    # Also check the job cache in case a previous run already completed.
+    with _in_flight_lock:
+        if asset_id in _in_flight_assets:
+            print(f"[Frame.io webhook] Duplicate event for {asset_id} — already in flight, skipping")
+            return {"status": "duplicate", "asset_id": asset_id}
+        with _cache_lock:
+            existing = [
+                j for j in _cache.values()
+                if j.get("frame_io_asset_id") == asset_id
+                and j.get("status") not in ("failed",)
+            ]
+        if existing:
+            print(f"[Frame.io webhook] Duplicate event for {asset_id} — job {existing[0]['job_id']} exists, skipping")
+            return {"status": "duplicate", "asset_id": asset_id}
+        _in_flight_assets.add(asset_id)
 
     # Run audit in background thread to return 200 immediately to Frame.io
     thread = threading.Thread(
@@ -154,6 +165,14 @@ def _process_frameio_asset(asset_id: str, source: str = "webhook") -> None:
     Background task: fetch asset → download video → run audit → post comments.
     """
     print(f"[Frame.io] Processing asset {asset_id}...")
+    try:
+        _process_frameio_asset_inner(asset_id, source)
+    finally:
+        with _in_flight_lock:
+            _in_flight_assets.discard(asset_id)
+
+
+def _process_frameio_asset_inner(asset_id: str, source: str = "webhook") -> None:
 
     # --- Fetch asset metadata ---
     try:
