@@ -1,8 +1,0 @@
-{
-  "brand": "TestBrand2",
-  "logo_description": "test",
-  "contracted_screen_time_seconds": 30,
-  "required_contexts": [],
-  "prohibited_contexts": [],
-  "severity_overrides": {}
-}
