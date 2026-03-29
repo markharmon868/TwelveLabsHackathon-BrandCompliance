@@ -116,6 +116,7 @@ def _find_brand_appearances(
     """
     queries = _build_search_queries(guidelines)
     seen: dict[tuple, dict] = {}  # (start, end) → clip, to deduplicate across queries
+    last_error: Exception | None = None
 
     for query in queries:
         try:
@@ -127,8 +128,10 @@ def _find_brand_appearances(
                 group_by="clip",
                 page_limit=_MAX_BRAND_CLIPS,
             )
+            last_error = None  # at least one query succeeded
         except Exception as e:
             print(f"    Search error for '{query}': {type(e).__name__}: {e}")
+            last_error = e
             continue
 
         for item in (results.data or []):
@@ -140,6 +143,11 @@ def _find_brand_appearances(
 
     clips = sorted(seen.values(), key=lambda c: c["score"], reverse=True)
     print(f"  Marengo found {len(clips)} unique clip(s) across {len(queries)} queries (threshold={_SEARCH_THRESHOLD})")
+
+    # If every query failed and we got nothing, surface the error instead of silent empty result
+    if not clips and last_error is not None and not seen:
+        raise RuntimeError(f"All Marengo search queries failed. Last error: {type(last_error).__name__}: {last_error}")
+
     return clips[:_MAX_BRAND_CLIPS]
 
 
