@@ -32,7 +32,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Brand */}
         <div className="flex flex-col gap-1">
           <span className="text-violet-200 font-black italic tracking-tighter text-lg leading-none">
-            The Obsidian Lens
+            Brand Unsafe
           </span>
           <span className="text-[11px] tracking-[0.05rem] uppercase text-vio-text/40 font-semibold">
             Brand Compliance

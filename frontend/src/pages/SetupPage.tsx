@@ -34,7 +34,7 @@ export default function SetupPage() {
         {/* Logo */}
         <div className="text-center mb-10">
           <p className="text-violet-200 font-black italic tracking-tighter text-3xl leading-none mb-2">
-            The Obsidian Lens
+            Brand Unsafe
           </p>
           <p className="text-sm text-muted/60 uppercase tracking-widest font-semibold">
             Brand Compliance

@@ -302,7 +302,7 @@ def post_review_decision(
     ]
     if notes:
         lines.append(f"\nReviewer notes: {notes}")
-    lines.append("\nReviewed via The Obsidian Lens | Brand Compliance Auditor")
+    lines.append("\nReviewed via Brand Unsafe | Brand Compliance Auditor")
 
     try:
         post_comment(asset_id, "\n".join(lines), timestamp_seconds=0)

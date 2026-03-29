@@ -100,7 +100,7 @@ def register_frameio_custom_action(data: dict = Body(...)) -> dict:
         result = register_custom_action(
             account_id=account_id,
             name="Submit for Compliance Review",
-            description="Run a brand compliance audit via The Obsidian Lens",
+            description="Run a brand compliance audit via Brand Unsafe",
             url=action_url,
         )
         action_data = result.get("data", result)

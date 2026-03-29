@@ -256,7 +256,7 @@ export default function JobPage() {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `obsidian-lens-report-${job.job_id.slice(0, 8)}.json`;
+                a.download = `brand-unsafe-report-${job.job_id.slice(0, 8)}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
               }}

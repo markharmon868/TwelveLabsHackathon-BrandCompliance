@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Obsidian Lens surface hierarchy
+        // Brand Unsafe surface hierarchy
         "obs-base":    "#140728",
         "obs-bg":      "#1a0c2d",
         "obs-low":     "#221536",

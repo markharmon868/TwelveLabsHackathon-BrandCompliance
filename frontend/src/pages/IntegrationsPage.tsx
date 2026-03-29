@@ -53,11 +53,11 @@ export default function IntegrationsPage() {
         setConfig(c);
         setSamples(samp);
         // Pre-fill saved values
-        if (c.webhook_url) {
-          // Strip the path suffix to recover the base URL
-          const saved = c.webhook_url.replace(/\/webhooks\/frameio$/, "").replace(/\/webhooks\/frameio-action$/, "");
-          setServerUrl(saved);
-        }
+        // Pre-fill from saved config, or fall back to current origin
+        const saved = c.webhook_url
+          ? c.webhook_url.replace(/\/webhooks\/frameio$/, "").replace(/\/webhooks\/frameio-action$/, "")
+          : window.location.origin;
+        setServerUrl(saved);
         const policy = c.default_guidelines || samp[0]?.filename || "";
         setDefaultPolicy(policy);
         setAuditPolicy(policy);
