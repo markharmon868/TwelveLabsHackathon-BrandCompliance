@@ -18,8 +18,8 @@ from typing import Any
 from .client import get_client
 from .models import Appearance, Guidelines, Violation
 
-# Use "none" to return all clips regardless of score — Pegasus filters in pass 2.
-_SEARCH_THRESHOLD = "none"
+# Use "low" threshold to return many clips — Pegasus filters in pass 2.
+_SEARCH_THRESHOLD = "low"
 
 # Cap on brand appearance clips to evaluate (avoids runaway API costs).
 _MAX_BRAND_CLIPS = 20
@@ -128,7 +128,7 @@ def _find_brand_appearances(
                 page_limit=_MAX_BRAND_CLIPS,
             )
         except Exception as e:
-            print(f"    Search error for '{query}': {e}")
+            print(f"    Search error for '{query}': {type(e).__name__}: {e}")
             continue
 
         for item in (results.data or []):
@@ -139,6 +139,7 @@ def _find_brand_appearances(
                 seen[key] = {"start": item.start, "end": item.end, "score": item.score}
 
     clips = sorted(seen.values(), key=lambda c: c["score"], reverse=True)
+    print(f"  Marengo found {len(clips)} unique clip(s) across {len(queries)} queries (threshold={_SEARCH_THRESHOLD})")
     return clips[:_MAX_BRAND_CLIPS]
 
 
