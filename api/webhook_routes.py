@@ -80,6 +80,17 @@ async def frameio_webhook(
     if event_name not in handled_events or not asset_id:
         return {"status": "ignored", "reason": f"event '{event_name}' not handled"}
 
+    # Deduplicate: skip if a job for this asset is already running or complete
+    with _cache_lock:
+        existing = [
+            j for j in _cache.values()
+            if j.get("frame_io_asset_id") == asset_id
+            and j.get("status") not in ("failed",)
+        ]
+    if existing:
+        print(f"[Frame.io webhook] Duplicate event for {asset_id} — already have job {existing[0]['job_id']}, skipping")
+        return {"status": "duplicate", "asset_id": asset_id}
+
     # Run audit in background thread to return 200 immediately to Frame.io
     thread = threading.Thread(
         target=_process_frameio_asset,
